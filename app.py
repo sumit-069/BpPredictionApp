@@ -18,11 +18,25 @@ def bandpass_filter(signal, fs=30, low=0.7, high=4):
     b, a = butter(3, [low, high], btype='band')
     return filtfilt(b, a, signal)
 
-# BPM calculation
+# Normalize signal
+def normalize(signal):
+    return (signal - np.mean(signal)) / np.std(signal)
+
+# BPM calculation (improved)
 def calculate_bpm(signal, fs=30):
     filtered = bandpass_filter(signal, fs)
-    peaks, _ = find_peaks(filtered, distance=fs/2)
-    bpm = len(peaks) * (60 / (len(signal) / fs))
+    filtered = normalize(filtered)
+
+    peaks, _ = find_peaks(filtered, distance=fs*0.5, height=0)
+
+    if len(peaks) < 2:
+        return 0, filtered
+
+    peak_intervals = np.diff(peaks) / fs
+    avg_interval = np.mean(peak_intervals)
+
+    bpm = 60 / avg_interval
+
     return bpm, filtered
 
 if uploaded_file is not None:
@@ -36,7 +50,7 @@ if uploaded_file is not None:
 
     red_signal = []
     fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps == 0:
+    if fps == 0 or fps is None:
         fps = 30
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -49,9 +63,9 @@ if uploaded_file is not None:
         if not ret:
             break
 
-        # Extract RED channel (important)
+        # Extract RED channel
         avg_color = np.mean(frame, axis=(0,1))
-        red_signal.append(avg_color[2])  # RED channel
+        red_signal.append(avg_color[2])
 
         frame_count += 1
         if total_frames > 0:
@@ -63,9 +77,14 @@ if uploaded_file is not None:
 
     if len(red_signal) > 100:
 
-        bpm, filtered = calculate_bpm(np.array(red_signal), fs=fps)
+        signal = np.array(red_signal)
 
-        st.success(f"❤️ Heart Rate: {int(bpm)} BPM")
+        bpm, filtered = calculate_bpm(signal, fs=fps)
+
+        if bpm == 0:
+            st.warning("⚠️ Could not detect stable heart rate")
+        else:
+            st.success(f"❤️ Heart Rate: {int(bpm)} BPM")
 
         st.subheader("📈 PPG Signal")
         st.line_chart(filtered)
