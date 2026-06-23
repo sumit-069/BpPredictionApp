@@ -67,7 +67,8 @@ def extract_features(signal, fs):
     rise_time = np.mean(rise_times)
 
     amplitude = np.max(signal) - np.min(signal)
-    area = np.trapz(signal)
+    from scipy.integrate import trapezoid
+    area = trapezoid(signal)
 
     slopes = []
     for p in peaks:
